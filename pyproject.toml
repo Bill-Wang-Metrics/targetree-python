@@ -1,0 +1,41 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "targetree"
+version = "0.1.0"
+description = "CART with PFS and MDFS splitting for threshold-focused classification"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.9"
+keywords = ["decision-tree", "classification", "pfs", "mdfs", "cart"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "numpy>=1.22",
+    "scipy>=1.8",
+    "scikit-learn>=1.0",
+]
+
+[project.optional-dependencies]
+vis = ["matplotlib>=3.5"]
+dev = ["pytest>=7", "matplotlib>=3.5"]
+
+[project.urls]
+Repository = "https://github.com/YOUR_USERNAME/targetree"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/targetree"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
