@@ -1,6 +1,6 @@
 # targetree
 
-CART decision trees with **PFS** (Probability-Focused Splitting) and **MDFS** (Maximum Distance to Frontier Splitting) — designed for threshold-focused binary classification.
+CART decision trees with **PFS** (Penalized Final Split) and **MDFS** (Maximum Distance Final Split) — designed for threshold-focused binary classification.
 
 ## Installation
 
