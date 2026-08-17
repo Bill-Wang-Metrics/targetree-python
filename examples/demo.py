@@ -4,6 +4,7 @@ import numpy as np
 from scipy.special import expit
 
 from targetree import CART
+from targetree.tree_vis import plot_cart_tree
 
 
 def generate_data(n: int = 5000, seed: int = 42):
@@ -17,7 +18,7 @@ def generate_data(n: int = 5000, seed: int = 42):
 def main():
     X, y, p = generate_data()
 
-    model = CART(depth=10, minimum_portion=0.02, lbd=1, cut=0.3, method="mdfs")
+    model = CART(depth=3, minimum_portion=0.02, lbd=1, cut=0.3, method="mdfs")
     model.fit(X, y)
 
     model.print_tree()
@@ -25,13 +26,7 @@ def main():
     print(f"\nTP={tp}  FN={fn}  FP={fp}  TN={tn}")
     print(f"Accuracy: {(tp + tn) / (tp + fn + fp + tn):.3f}")
 
-    # Optional: visualise (requires matplotlib)
-    try:
-        from targetree.tree_vis import plot_cart_tree
-
-        plot_cart_tree(model.tree, feature_name=model.feature_name, cut=model.cut)
-    except ImportError:
-        print("\ntree_vis requires matplotlib — install with: pip install targetree[vis]")
+    plot_cart_tree(model.tree, feature_name=model.feature_name, cut=model.cut)
 
 
 if __name__ == "__main__":

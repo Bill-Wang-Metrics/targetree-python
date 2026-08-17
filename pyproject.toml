@@ -25,11 +25,11 @@ dependencies = [
     "numpy>=1.22",
     "scipy>=1.8",
     "scikit-learn>=1.0",
+    "matplotlib>=3.5",
 ]
 
 [project.optional-dependencies]
-vis = ["matplotlib>=3.5"]
-dev = ["pytest>=7", "matplotlib>=3.5"]
+dev = ["pytest>=7"]
 
 [project.urls]
 Repository = "https://github.com/YOUR_USERNAME/targetree"

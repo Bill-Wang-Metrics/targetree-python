@@ -6,9 +6,9 @@ CART decision trees with **PFS** (Probability-Focused Splitting) and **MDFS** (M
 
 ```bash
 pip install targetree
-# with tree visualization support
-pip install targetree[vis]
 ```
+
+Tree visualization (`plot_cart_tree`) is included automatically — no extras needed.
 
 ## Quick start
 
@@ -39,6 +39,19 @@ tp, fn, fp, tn = model.get_risk(X_test, y_test.astype(float))
 - **`lbd`** — penalty weight blending impurity and frontier distance (PFS only)
 - **`categorical_features`** — list of column indices treated as categorical
 - **`feature_name`** — list of feature names for `print_tree()`
+
+## Visualization
+
+```python
+from targetree.tree_vis import plot_cart_tree
+
+plot_cart_tree(model.tree,
+               feature_name=model.feature_name,
+               cut=model.cut,
+               title="Hospital Closure Tree")
+```
+
+Leaf nodes are colored **blue** when `P(Y=1|X) > cut` (predicted positive) and **white** otherwise.
 
 ## Honest estimation
 

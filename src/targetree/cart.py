@@ -146,7 +146,11 @@ class CART:
 
         if len(weighted_impurity) > 10:
             start_idx, end_idx = find_elements(lc.tolist(), int(0.1 * nn), int(0.9 * nn))
-            index = int(np.argmin(weighted_impurity[start_idx:end_idx])) + start_idx
+            window = weighted_impurity[start_idx:end_idx]
+            if len(window) == 0:
+                index = int(np.argmin(weighted_impurity))
+            else:
+                index = int(np.argmin(window)) + start_idx
         else:
             index = int(np.argmin(weighted_impurity))
 
@@ -184,7 +188,11 @@ class CART:
 
         if len(weighted_impurity) > 10:
             start_idx, end_idx = find_elements(lc.tolist(), int(0.1 * nn), int(0.9 * nn))
-            index = int(np.argmin(weighted_impurity[start_idx:end_idx])) + start_idx
+            window = weighted_impurity[start_idx:end_idx]
+            if len(window) == 0:
+                index = int(np.argmin(weighted_impurity))
+            else:
+                index = int(np.argmin(window)) + start_idx
         else:
             index = int(np.argmin(weighted_impurity))
 
@@ -237,7 +245,11 @@ class CART:
 
         if len(weighted_impurity) > 10:
             start_idx, end_idx = find_elements(lc.tolist(), int(0.1 * nn), int(0.9 * nn))
-            index = int(np.argmin(weighted_impurity[start_idx:end_idx])) + start_idx
+            window = weighted_impurity[start_idx:end_idx]
+            if len(window) == 0:
+                index = int(np.argmin(weighted_impurity))
+            else:
+                index = int(np.argmin(window)) + start_idx
         else:
             index = int(np.argmin(weighted_impurity))
 

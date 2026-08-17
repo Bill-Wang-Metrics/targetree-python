@@ -4,14 +4,15 @@ tree_vis.py
 Visualize a CART decision tree in the style of sklearn's plot_tree.
 
   - Internal nodes : light-grey boxes with the split condition only.
-  - Leaf nodes     : colored boxes (blue = low P(Y=1|X), red = high),
+  - Leaf nodes     : blue  when P(Y=1|X) > cut  (predicted positive),
+                     white when P(Y=1|X) ≤ cut  (predicted negative),
                      showing  "samples = N"  and  "P(Y=1|X) = x.xxxx".
   - Edges          : plain grey lines (no labels / no arrows).
-  - Colorbar       : P(Y=1|X) scale; a dashed line marks the decision cut.
+  - Legend         : shows the blue / white colour meaning and the cut value.
 
 Usage
 -----
-    from tree_vis import plot_cart_tree
+    from targetree.tree_vis import plot_cart_tree
     plot_cart_tree(model.tree,
                    feature_name=model.feature_name,
                    cut=model.cut,
@@ -19,7 +20,11 @@ Usage
 """
 
 import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
 from matplotlib.patches import FancyBboxPatch
+
+_BLUE  = '#5B9BD5'   # positive leaf colour  (P > cut)
+_WHITE = '#FFFFFF'   # negative leaf colour  (P ≤ cut)
 
 
 def plot_cart_tree(tree, feature_name=None, cut=0.5,
@@ -96,9 +101,6 @@ def plot_cart_tree(tree, feature_name=None, cut=0.5,
     if title:
         ax.set_title(title, fontsize=13, fontweight='bold', pad=10)
 
-    # Blue gradient: light blue (P≈0) → dark blue (P≈1)
-    cmap = plt.cm.Blues
-
     # ── Helper: feature name and split label ─────────────────────────────────
     def _fname(f):
         return feature_name[f] if feature_name is not None else f"X{f}"
@@ -127,12 +129,10 @@ def plot_cart_tree(tree, feature_name=None, cut=0.5,
         x, y = positions[nid]
 
         if isinstance(node, tuple):                     # ── leaf node ──
-            prob  = node[0]
-            n     = node[1]
-            fcolor = cmap(prob)
-            # Choose text color for legibility against background
-            lum = 0.299 * fcolor[0] + 0.587 * fcolor[1] + 0.114 * fcolor[2]
-            tc  = 'white' if lum < 0.50 else '#111111'
+            prob   = node[0]
+            n      = node[1]
+            fcolor = _BLUE if prob > cut else _WHITE
+            tc     = 'white' if prob > cut else '#111111'
 
             box = FancyBboxPatch(
                 (x - hw, y - hh), node_w, node_h,
@@ -164,21 +164,16 @@ def plot_cart_tree(tree, feature_name=None, cut=0.5,
                     ha='center', va='center',
                     fontsize=8, color='#111111', zorder=3)
 
-    # ── 5. Colorbar ───────────────────────────────────────────────────────────
-    sm = plt.cm.ScalarMappable(cmap=cmap, norm=plt.Normalize(vmin=0, vmax=1))
-    sm.set_array([])
-    cbar = fig.colorbar(sm, ax=ax,
-                        fraction=0.015, pad=0.01,
-                        aspect=25, shrink=0.65)
-    cbar.set_label("P(Y=1|X)  [leaf color]", fontsize=9)
-    # Dashed line at the decision cut threshold
-    cbar.ax.axhline(y=cut, color='black', lw=1.5, ls='--')
-    cbar.ax.text(1.05, cut, f" cut = {cut}",
-                 va='center', fontsize=8,
-                 transform=cbar.ax.get_yaxis_transform())
+    # ── 5. Legend ─────────────────────────────────────────────────────────────
+    pos_patch = mpatches.Patch(facecolor=_BLUE,  edgecolor='#444444',
+                               label=f'P(Y=1|X) > {cut}  (positive)')
+    neg_patch = mpatches.Patch(facecolor=_WHITE, edgecolor='#444444',
+                               label=f'P(Y=1|X) ≤ {cut}  (negative)')
+    ax.legend(handles=[pos_patch, neg_patch],
+              loc='upper right', fontsize=8, framealpha=0.9)
 
-    plt.tight_layout()
+    fig.tight_layout()
     if save_path:
-        plt.savefig(save_path, dpi=150, bbox_inches='tight')
+        fig.savefig(save_path, dpi=150, bbox_inches='tight')
     else:
         plt.show()
