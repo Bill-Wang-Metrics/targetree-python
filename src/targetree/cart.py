@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import numpy as np
 
-from .utils import find_elements
-
 
 class CART:
     """Classification and Regression Tree with optional PFS/MDFS splitting.
@@ -15,7 +13,8 @@ class CART:
     depth:
         Maximum depth of the tree.
     minimum_portion:
-        Minimum fraction of total samples required to attempt a split.
+        Minimum fraction of the total training sample required in every
+        terminal node.
     lbd:
         Weight of the L1-style penalty term relative to impurity.
         Defaults to ``0`` for ``'cart'``, ``0`` for ``'pfs'``, ``1`` for
@@ -88,7 +87,38 @@ class CART:
             left = X[:, feature_idx] <= threshold
         return left, ~left
 
-    def _best_split(self, X: np.ndarray, y: np.ndarray):
+    @staticmethod
+    def _best_candidate_index(
+        left_counts: np.ndarray,
+        scores: np.ndarray,
+        total: int,
+        min_leaf_samples: int,
+    ) -> int | None:
+        """Return the best feasible split index under the leaf-size rule."""
+        right_counts = total - left_counts
+        feasible = np.flatnonzero(
+            (left_counts >= min_leaf_samples)
+            & (right_counts >= min_leaf_samples)
+        )
+        if feasible.size == 0:
+            return None
+
+        # Preserve the existing preference for 10%--90% splits when that
+        # window contains at least one candidate satisfying the user's
+        # minimum terminal-node size.
+        if len(scores) > 10:
+            balanced = feasible[
+                (left_counts[feasible] >= int(0.1 * total))
+                & (left_counts[feasible] <= int(0.9 * total))
+            ]
+            if balanced.size:
+                feasible = balanced
+
+        return int(feasible[np.argmin(scores[feasible])])
+
+    def _best_split(
+        self, X: np.ndarray, y: np.ndarray, min_leaf_samples: int
+    ):
         """Find the best impurity-reducing split across all features."""
         best_feature, best_threshold, best_impurity = None, None, float("inf")
         sum_y = y.sum()
@@ -101,11 +131,13 @@ class CART:
 
             if self.is_categorical is not None and self.is_categorical[feature_idx]:
                 result = self._best_split_categorical(
-                    X[:, feature_idx], y, sum_y, sum_y2, nn
+                    X[:, feature_idx], y, sum_y, sum_y2, nn,
+                    min_leaf_samples,
                 )
             else:
                 result = self._best_split_numerical(
-                    X[:, feature_idx], y, sum_y, sum_y2, nn
+                    X[:, feature_idx], y, sum_y, sum_y2, nn,
+                    min_leaf_samples,
                 )
 
             if result is None:
@@ -120,7 +152,9 @@ class CART:
 
         return best_feature, best_threshold
 
-    def _best_split_categorical(self, x, y, sum_y, sum_y2, nn):
+    def _best_split_categorical(
+        self, x, y, sum_y, sum_y2, nn, min_leaf_samples
+    ):
         categories, inverse = np.unique(x, return_inverse=True)
         if len(categories) == 1:
             return None
@@ -144,20 +178,18 @@ class CART:
         right_var = (sum_y2 - lsq) / rc - ((sum_y - ls) / rc) ** 2
         weighted_impurity = (left_var * lc + right_var * rc) * 2
 
-        if len(weighted_impurity) > 10:
-            start_idx, end_idx = find_elements(lc.tolist(), int(0.1 * nn), int(0.9 * nn))
-            window = weighted_impurity[start_idx:end_idx]
-            if len(window) == 0:
-                index = int(np.argmin(weighted_impurity))
-            else:
-                index = int(np.argmin(window)) + start_idx
-        else:
-            index = int(np.argmin(weighted_impurity))
+        index = self._best_candidate_index(
+            lc, weighted_impurity, nn, min_leaf_samples
+        )
+        if index is None:
+            return None
 
         threshold = set(categories[sorted_cat[: index + 1]])
         return threshold, weighted_impurity[index]
 
-    def _best_split_numerical(self, x, y, sum_y, sum_y2, nn):
+    def _best_split_numerical(
+        self, x, y, sum_y, sum_y2, nn, min_leaf_samples
+    ):
         sorted_indices = np.argsort(x)
         x_sorted = x[sorted_indices]
         y_sorted = y[sorted_indices]
@@ -186,29 +218,61 @@ class CART:
         right_var = (sum_y2 - lsq) / rc - ((sum_y - ls) / rc) ** 2
         weighted_impurity = (left_var * lc + right_var * rc) * 2
 
-        if len(weighted_impurity) > 10:
-            start_idx, end_idx = find_elements(lc.tolist(), int(0.1 * nn), int(0.9 * nn))
-            window = weighted_impurity[start_idx:end_idx]
-            if len(window) == 0:
-                index = int(np.argmin(weighted_impurity))
-            else:
-                index = int(np.argmin(window)) + start_idx
-        else:
-            index = int(np.argmin(weighted_impurity))
+        index = self._best_candidate_index(
+            lc, weighted_impurity, nn, min_leaf_samples
+        )
+        if index is None:
+            return None
 
         thre_idx = int(lc[index]) - 1
         threshold = (x_sorted[thre_idx] + x_sorted[thre_idx + 1]) / 2
         return threshold, weighted_impurity[index]
 
-    def _best_pfs_split(self, x: np.ndarray, y: np.ndarray, is_categorical: bool):
+    def _best_pfs_split(
+        self,
+        x: np.ndarray,
+        y: np.ndarray,
+        is_categorical: bool,
+        min_leaf_samples: int,
+    ):
         """Leaf-level split using the PFS/MDFS criterion."""
         if is_categorical:
             categories, inverse = np.unique(x, return_inverse=True)
+            if len(categories) == 1:
+                return None
+
             x_count = np.bincount(inverse)
             y_count = np.bincount(inverse, weights=y)
+            y2_count = np.bincount(inverse, weights=y ** 2)
             cat_means = y_count / x_count
-            left_categories = set(categories[cat_means > self.cut])
-            return left_categories
+
+            sorted_cat = np.argsort(cat_means)
+            x_count_s = x_count[sorted_cat]
+            y_count_s = y_count[sorted_cat]
+            y2_count_s = y2_count[sorted_cat]
+
+            lc = np.cumsum(x_count_s)[:-1]
+            ls = np.cumsum(y_count_s)[:-1]
+            lsq = np.cumsum(y2_count_s)[:-1]
+            nn = len(y)
+            rc = nn - lc
+            lp = lsq / lc
+            rp = (y2_count.sum() - lsq) / rc
+
+            weighted_impurity = (
+                (lp - (ls / lc) ** 2) * lc
+                + (rp - ((y_count.sum() - ls) / rc) ** 2) * rc
+            ) * (1 - self.lbd) + (
+                -np.abs(self.cut - lp) * lc
+                - np.abs(self.cut - rp) * rc
+            ) * self.lbd
+
+            index = self._best_candidate_index(
+                lc, weighted_impurity, nn, min_leaf_samples
+            )
+            if index is None:
+                return None
+            return set(categories[sorted_cat[: index + 1]])
 
         sum_y = y.sum()
         sum_y2 = (y ** 2).sum()
@@ -233,6 +297,9 @@ class CART:
         lc = np.array(left_count[1:])
         ls = np.array(left_sum[1:])
         lsq = np.array(left_sq[1:])
+        if len(lc) == 0:
+            return None
+
         rc = nn - lc
         lp = lsq / lc
         rp = (sum_y2 - lsq) / rc
@@ -243,15 +310,11 @@ class CART:
             -np.abs(self.cut - lp) * lc - np.abs(self.cut - rp) * rc
         ) * self.lbd
 
-        if len(weighted_impurity) > 10:
-            start_idx, end_idx = find_elements(lc.tolist(), int(0.1 * nn), int(0.9 * nn))
-            window = weighted_impurity[start_idx:end_idx]
-            if len(window) == 0:
-                index = int(np.argmin(weighted_impurity))
-            else:
-                index = int(np.argmin(window)) + start_idx
-        else:
-            index = int(np.argmin(weighted_impurity))
+        index = self._best_candidate_index(
+            lc, weighted_impurity, nn, min_leaf_samples
+        )
+        if index is None:
+            return None
 
         thre_idx = int(lc[index]) - 1
         return (x_sorted[thre_idx] + x_sorted[thre_idx + 1]) / 2
@@ -284,8 +347,9 @@ class CART:
         self
         """
         total = len(target)
-        min_samples = int(self.minimum_portion * total)
-        mmin_samples = int(self.minimum_portion * total / 3)
+        min_leaf_samples = max(
+            1, int(np.ceil(self.minimum_portion * total))
+        )
 
         n_features = features.shape[1]
         self.is_categorical = np.zeros(n_features, dtype=bool)
@@ -295,27 +359,33 @@ class CART:
         leaf_method = self._best_pfs_split  # used at final depth level
 
         def grow(X, y, depth):
-            if depth == self.depth or len(np.unique(y)) == 1 or len(y) < min_samples:
+            if (
+                depth == self.depth
+                or len(np.unique(y)) == 1
+                or len(y) < 2 * min_leaf_samples
+            ):
                 return (np.mean(y), len(y))
 
-            feature, threshold = self._best_split(X, y)
+            feature, threshold = self._best_split(
+                X, y, min_leaf_samples
+            )
             if feature is None:
                 return (np.mean(y), len(y))
 
             left_mask, right_mask = self._split_mask(X, feature, threshold)
-            if min(left_mask.sum(), right_mask.sum()) < mmin_samples:
+            if min(left_mask.sum(), right_mask.sum()) < min_leaf_samples:
                 return (np.mean(y), len(y))
 
-            at_leaf = (
-                depth == self.depth - 1
-                or min(left_mask.sum(), right_mask.sum()) < min_samples
-            )
+            at_leaf = depth == self.depth - 1
             if at_leaf and self.method != "cart":
                 threshold = leaf_method(
-                    X[:, feature], y, bool(self.is_categorical[feature])
+                    X[:, feature], y, bool(self.is_categorical[feature]),
+                    min_leaf_samples,
                 )
+                if threshold is None:
+                    return (np.mean(y), len(y))
                 left_mask, right_mask = self._split_mask(X, feature, threshold)
-                if min(left_mask.sum(), right_mask.sum()) < mmin_samples:
+                if min(left_mask.sum(), right_mask.sum()) < min_leaf_samples:
                     return (np.mean(y), len(y))
                 return {
                     "feature": feature,
@@ -335,28 +405,30 @@ class CART:
             if (
                 depth == self.depth
                 or (p.min() > self.cut or p.max() < self.cut)
-                or len(y) < min_samples
+                or len(y) < 2 * min_leaf_samples
             ):
                 return (np.mean(p), len(p))
 
-            feature, threshold = self._best_split(X, p)
+            feature, threshold = self._best_split(
+                X, p, min_leaf_samples
+            )
             if feature is None:
                 return (np.mean(p), len(p))
 
             left_mask, right_mask = self._split_mask(X, feature, threshold)
-            if min(left_mask.sum(), right_mask.sum()) < mmin_samples:
+            if min(left_mask.sum(), right_mask.sum()) < min_leaf_samples:
                 return (np.mean(p), len(p))
 
-            at_leaf = (
-                depth == self.depth - 1
-                or min(left_mask.sum(), right_mask.sum()) < min_samples
-            )
+            at_leaf = depth == self.depth - 1
             if at_leaf and self.method != "cart":
                 threshold = leaf_method(
-                    X[:, feature], y, bool(self.is_categorical[feature])
+                    X[:, feature], y, bool(self.is_categorical[feature]),
+                    min_leaf_samples,
                 )
+                if threshold is None:
+                    return (np.mean(p), len(p))
                 left_mask, right_mask = self._split_mask(X, feature, threshold)
-                if min(left_mask.sum(), right_mask.sum()) < mmin_samples:
+                if min(left_mask.sum(), right_mask.sum()) < min_leaf_samples:
                     return (np.mean(p), len(p))
                 return {
                     "feature": feature,

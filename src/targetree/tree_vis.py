@@ -4,9 +4,9 @@ tree_vis.py
 Visualize a CART decision tree in the style of sklearn's plot_tree.
 
   - Internal nodes : light-grey boxes with the split condition only.
-  - Leaf nodes     : blue  when P(Y=1|X) > cut  (predicted positive),
-                     white when P(Y=1|X) ≤ cut  (predicted negative),
-                     showing  "samples = N"  and  "P(Y=1|X) = x.xxxx".
+  - Leaf nodes     : blue  when mu-hat > cut  (predicted positive),
+                     white when mu-hat ≤ cut  (predicted negative),
+                     showing "N = n" and the estimated leaf mean, mu-hat.
   - Edges          : plain grey lines (no labels / no arrows).
   - Legend         : shows the blue / white colour meaning and the cut value.
 
@@ -22,13 +22,15 @@ Usage
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from matplotlib.patches import FancyBboxPatch
+from pathlib import Path
 
-_BLUE  = '#5B9BD5'   # positive leaf colour  (P > cut)
-_WHITE = '#FFFFFF'   # negative leaf colour  (P ≤ cut)
+_BLUE  = '#5B9BD5'   # positive leaf colour  (mu-hat > cut)
+_WHITE = '#FFFFFF'   # negative leaf colour  (mu-hat ≤ cut)
 
 
 def plot_cart_tree(tree, feature_name=None, cut=0.5,
-                   figsize=None, title=None, save_path=None):
+                   figsize=None, title=None, save_path=None,
+                   font_size=None, split_rule_lines=1):
     """
     Draw a CART decision tree as a matplotlib figure.
 
@@ -42,9 +44,20 @@ def plot_cart_tree(tree, feature_name=None, cut=0.5,
     cut          : decision probability threshold drawn on the colorbar.
     figsize      : (width, height) in inches.  Auto-computed if None.
     title        : optional figure title string.
-    save_path    : file path to save the figure (e.g. "tree.png").
+    save_path    : file path to save the figure. If it has no extension,
+                   ".pdf" is appended; for example, "tree" saves
+                   "tree.pdf". An explicit extension can still be supplied.
                    If None, calls plt.show() instead.
+    font_size    : font size used for every node label and the legend. If
+                   None, uses the largest size for which every node label
+                   fits inside its box.
+    split_rule_lines : number of lines used for an internal-node split rule.
+                   Use 1 for "X ≤ a" or 2 for "X" on the first line and
+                   "≤ a" on the second line.
     """
+
+    if split_rule_lines not in (1, 2):
+        raise ValueError("split_rule_lines must be either 1 or 2")
 
     # ── 1. Assign (x, y) positions ──────────────────────────────────────────
     #
@@ -109,8 +122,65 @@ def plot_cart_tree(tree, feature_name=None, cut=0.5,
         fn = _fname(feature)
         if isinstance(threshold, (set, frozenset, list, tuple)):
             cats = sorted(str(c) for c in threshold)
-            return f"{fn} ∈ {{{', '.join(cats)}}}"
-        return f"{fn} ≤ {threshold:.4f}"
+            condition = f"∈ {{{', '.join(cats)}}}"
+        else:
+            condition = f"≤ {threshold:.4f}"
+        separator = " " if split_rule_lines == 1 else "\n"
+        return f"{fn}{separator}{condition}"
+
+    # Use one common font size throughout the tree. In automatic mode, measure
+    # the rendered labels (including math notation) instead of estimating their
+    # width from character counts.
+    split_labels = [
+        _split_label(node["feature"], node["threshold"])
+        for node in node_info.values() if not isinstance(node, tuple)
+    ]
+    leaf_labels = [
+        (rf"$\hat{{\mu}}$ = {node[0]:.4f}", f"N = {node[1]}")
+        for node in node_info.values() if isinstance(node, tuple)
+    ]
+
+    if font_size is not None:
+        if isinstance(font_size, bool) or not isinstance(font_size, (int, float)):
+            raise TypeError("font_size must be a positive number or None")
+        if font_size <= 0:
+            raise ValueError("font_size must be positive")
+        resolved_font_size = float(font_size)
+    else:
+        fig.canvas.draw()
+        renderer = fig.canvas.get_renderer()
+        origin = ax.transData.transform((0, 0))
+        corner = ax.transData.transform((node_w, node_h))
+        box_width_px = abs(corner[0] - origin[0])
+        box_height_px = abs(corner[1] - origin[1])
+
+        def _fits(candidate):
+            measurements = [(label, "normal", 0.82)
+                            for label in split_labels]
+            for mean_label, count_label in leaf_labels:
+                measurements.append((mean_label, "bold", 0.38))
+                measurements.append((count_label, "normal", 0.38))
+
+            for label, weight, height_fraction in measurements:
+                probe = ax.text(0, 0, label, fontsize=candidate,
+                                fontweight=weight, alpha=0)
+                bounds = probe.get_window_extent(renderer=renderer)
+                probe.remove()
+                if (bounds.width > box_width_px * 0.88 or
+                        bounds.height > box_height_px * height_fraction):
+                    return False
+            return True
+
+        # Search in quarter-point steps. The upper bound prevents a very small
+        # tree from receiving disproportionately large labels.
+        lower, upper = 4.0, 24.0
+        while upper - lower > 0.25:
+            candidate = (lower + upper) / 2
+            if _fits(candidate):
+                lower = candidate
+            else:
+                upper = candidate
+        resolved_font_size = round(lower * 4) / 4
 
     # ── 3. Draw edges (plain lines, top of child ↔ bottom of parent) ────────
     for nid, node in node_info.items():
@@ -142,13 +212,14 @@ def plot_cart_tree(tree, feature_name=None, cut=0.5,
             ax.add_patch(box)
 
             ax.text(x, y + hh * 0.30,
-                    f"P(Y=1|X) = {prob:.4f}",
+                    rf"$\hat{{\mu}}$ = {prob:.4f}",
                     ha='center', va='center',
-                    fontsize=8, fontweight='bold', color=tc, zorder=3)
+                    fontsize=resolved_font_size, fontweight='bold',
+                    color=tc, zorder=3)
             ax.text(x, y - hh * 0.38,
-                    f"samples = {n}",
+                    f"N = {n}",
                     ha='center', va='center',
-                    fontsize=8, color=tc, zorder=3)
+                    fontsize=resolved_font_size, color=tc, zorder=3)
 
         else:                                           # ── internal node ──
             label = _split_label(node["feature"], node["threshold"])
@@ -162,18 +233,21 @@ def plot_cart_tree(tree, feature_name=None, cut=0.5,
 
             ax.text(x, y, label,
                     ha='center', va='center',
-                    fontsize=8, color='#111111', zorder=3)
+                    fontsize=resolved_font_size, color='#111111', zorder=3)
 
     # ── 5. Legend ─────────────────────────────────────────────────────────────
     pos_patch = mpatches.Patch(facecolor=_BLUE,  edgecolor='#444444',
-                               label=f'P(Y=1|X) > {cut}  (positive)')
+                               label=rf'$\hat{{\mu}} > {cut}$  (positive)')
     neg_patch = mpatches.Patch(facecolor=_WHITE, edgecolor='#444444',
-                               label=f'P(Y=1|X) ≤ {cut}  (negative)')
+                               label=rf'$\hat{{\mu}} \leq {cut}$  (negative)')
     ax.legend(handles=[pos_patch, neg_patch],
-              loc='upper right', fontsize=8, framealpha=0.9)
+              loc='upper right', fontsize=resolved_font_size, framealpha=0.9)
 
     fig.tight_layout()
     if save_path:
+        save_path = Path(save_path)
+        if not save_path.suffix:
+            save_path = save_path.with_suffix(".pdf")
         fig.savefig(save_path, dpi=150, bbox_inches='tight')
     else:
         plt.show()
