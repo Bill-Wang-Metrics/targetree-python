@@ -2,5 +2,7 @@
 /examples/rolling_window.ipynb
 /examples/empirical.ipynb
 /examples/hospital_test.ipynb
+/examples/hospital_var.ipynb
 /examples/data/df_sample.csv
+/examples/data/rural hospital closure data.xlsx
 /examples/data/ruralhospital_subset.xlsx
