@@ -1,0 +1,2 @@
+# Keep the local rolling-window analysis out of the public package repository.
+/examples/rolling_window.ipynb
