@@ -1,2 +1,6 @@
-# Keep the local rolling-window analysis out of the public package repository.
+# Keep analyses and restricted hospital data out of the public package repository.
 /examples/rolling_window.ipynb
+/examples/empirical.ipynb
+/examples/hospital_test.ipynb
+/examples/data/df_sample.csv
+/examples/data/ruralhospital_subset.xlsx
