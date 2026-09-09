@@ -53,14 +53,6 @@ plot_cart_tree(model.tree,
 
 Leaf nodes are colored **blue** when `P(Y=1|X) > cut` (predicted positive) and **white** otherwise.
 
-## Honest estimation
-
-```python
-model.fit(X_build, y_build)
-model.honest_approach(X_honest, y_honest)
-honest_preds = model.predict(X_test, honest=True)
-```
-
 ## Development
 
 ```bash
