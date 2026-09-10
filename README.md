@@ -342,8 +342,9 @@ When `save_path` is omitted, `plot_cart_tree()` displays the diagram. When it
 is supplied, the function saves the diagram instead. PNG, PDF, and SVG output
 are supported; a path without an extension defaults to PDF.
 
-`font_size=None` automatically chooses the largest uniform node and legend
-font that fits every box. Supply a positive number to override it. Use
+`font_size=None` measures the final figure layout and automatically chooses
+the largest uniform node and legend font that fits every box with a small
+inner margin. Supply a positive number to override it. Use
 `split_rule_lines=1` for a one-line rule such as `Glucose ≤ 127.5`, or
 `split_rule_lines=2` to place the feature and condition on separate lines.
 Set `title_font_size` independently; its default is slightly larger than the

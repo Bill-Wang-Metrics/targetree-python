@@ -140,8 +140,9 @@ def plot_cart_tree(tree, feature_name=None, cut=0.5,
         return f"{fn}{separator}{condition}"
 
     # Use one common font size throughout the tree. In automatic mode, measure
-    # the rendered labels (including math notation) instead of estimating their
-    # width from character counts.
+    # the rendered labels (including math notation) against the boxes after
+    # Matplotlib has laid out the axes. A final fitting pass below rechecks the
+    # result after the title, nodes, and legend have all been drawn.
     split_labels = [
         _split_label(node["feature"], node["threshold"])
         for node in node_info.values() if not isinstance(node, tuple)
@@ -151,14 +152,26 @@ def plot_cart_tree(tree, feature_name=None, cut=0.5,
         for node in node_info.values() if isinstance(node, tuple)
     ]
 
-    if font_size is not None:
-        if isinstance(font_size, bool) or not isinstance(font_size, (int, float)):
-            raise TypeError("font_size must be a positive number or None")
-        if font_size <= 0:
-            raise ValueError("font_size must be positive")
-        resolved_font_size = float(font_size)
-    else:
-        fig.canvas.draw()
+    title_artist = None
+    if title:
+        provisional_title_size = (
+            14.0 if title_font_size is None else float(title_font_size)
+        )
+        title_artist = ax.set_title(
+            title,
+            fontsize=provisional_title_size,
+            fontweight='bold',
+            pad=10,
+        )
+
+    # tight_layout materially changes the width of each node in display
+    # pixels. It must run before measuring labels, otherwise automatic sizing
+    # is unnecessarily conservative on wide figures.
+    fig.tight_layout()
+    fig.canvas.draw()
+
+    def _largest_fitting_font():
+        """Return the largest quarter-point font that fits every node."""
         renderer = fig.canvas.get_renderer()
         origin = ax.transData.transform((0, 0))
         corner = ax.transData.transform((node_w, node_h))
@@ -166,42 +179,81 @@ def plot_cart_tree(tree, feature_name=None, cut=0.5,
         box_height_px = abs(corner[1] - origin[1])
 
         def _fits(candidate):
-            measurements = [(label, "normal", 0.82)
-                            for label in split_labels]
-            for mean_label, count_label in leaf_labels:
-                measurements.append((mean_label, "bold", 0.38))
-                measurements.append((count_label, "normal", 0.38))
+            # Reserve a small amount of inner padding so glyphs and accents do
+            # not touch the rounded box frame in vector or raster output.
+            max_width = box_width_px * 0.90
+            max_height = box_height_px * 0.86
 
-            for label, weight, height_fraction in measurements:
-                probe = ax.text(0, 0, label, fontsize=candidate,
-                                fontweight=weight, alpha=0)
+            for label in split_labels:
+                probe = ax.text(
+                    0, 0, label,
+                    ha='center', va='center',
+                    fontsize=candidate, alpha=0,
+                )
                 bounds = probe.get_window_extent(renderer=renderer)
                 probe.remove()
-                if (bounds.width > box_width_px * 0.88 or
-                        bounds.height > box_height_px * height_fraction):
+                if bounds.width > max_width or bounds.height > max_height:
                     return False
+
+            for mean_label, count_label in leaf_labels:
+                mean_probe = ax.text(
+                    0, hh * 0.30, mean_label,
+                    ha='center', va='center',
+                    fontsize=candidate, fontweight='bold', alpha=0,
+                )
+                count_probe = ax.text(
+                    0, -hh * 0.38, count_label,
+                    ha='center', va='center',
+                    fontsize=candidate, alpha=0,
+                )
+                mean_bounds = mean_probe.get_window_extent(renderer=renderer)
+                count_bounds = count_probe.get_window_extent(renderer=renderer)
+                mean_probe.remove()
+                count_probe.remove()
+
+                combined_height = (
+                    max(mean_bounds.y1, count_bounds.y1)
+                    - min(mean_bounds.y0, count_bounds.y0)
+                )
+                if (max(mean_bounds.width, count_bounds.width) > max_width or
+                        combined_height > max_height):
+                    return False
+
             return True
 
-        # Search in quarter-point steps. The upper bound prevents a very small
-        # tree from receiving disproportionately large labels.
-        lower, upper = 4.0, 24.0
-        while upper - lower > 0.25:
-            candidate = (lower + upper) / 2
-            if _fits(candidate):
-                lower = candidate
+        # Binary-search quarter-point increments. Fit is monotonic in font
+        # size, so this reaches the same deterministic answer with far fewer
+        # temporary text measurements than a linear scan.
+        best_quarters = 16  # 4 points
+        lower_quarters = 17
+        upper_quarters = 128  # 32 points
+        while lower_quarters <= upper_quarters:
+            midpoint = (lower_quarters + upper_quarters) // 2
+            if _fits(midpoint / 4):
+                best_quarters = midpoint
+                lower_quarters = midpoint + 1
             else:
-                upper = candidate
-        resolved_font_size = round(lower * 4) / 4
+                upper_quarters = midpoint - 1
+        return best_quarters / 4
+
+    if font_size is not None:
+        if isinstance(font_size, bool) or not isinstance(font_size, (int, float)):
+            raise TypeError("font_size must be a positive number or None")
+        if font_size <= 0:
+            raise ValueError("font_size must be positive")
+        resolved_font_size = float(font_size)
+    else:
+        resolved_font_size = _largest_fitting_font()
 
     resolved_title_font_size = (
         max(14.0, resolved_font_size + 2.0)
         if title_font_size is None else float(title_font_size)
     )
-    if title:
-        ax.set_title(title, fontsize=resolved_title_font_size,
-                     fontweight='bold', pad=10)
+    if title_artist is not None:
+        title_artist.set_fontsize(resolved_title_font_size)
 
     # ── 3. Draw edges (plain lines, top of child ↔ bottom of parent) ────────
+    node_text_artists = []
     for nid, node in node_info.items():
         if isinstance(node, tuple):
             continue
@@ -230,15 +282,19 @@ def plot_cart_tree(tree, feature_name=None, cut=0.5,
                 facecolor=fcolor, zorder=2)
             ax.add_patch(box)
 
-            ax.text(x, y + hh * 0.30,
-                    rf"$\hat{{\mu}}$ = {prob:.4f}",
-                    ha='center', va='center',
-                    fontsize=resolved_font_size, fontweight='bold',
-                    color=tc, zorder=3)
-            ax.text(x, y - hh * 0.38,
-                    f"N = {n}",
-                    ha='center', va='center',
-                    fontsize=resolved_font_size, color=tc, zorder=3)
+            node_text_artists.append(ax.text(
+                x, y + hh * 0.30,
+                rf"$\hat{{\mu}}$ = {prob:.4f}",
+                ha='center', va='center',
+                fontsize=resolved_font_size, fontweight='bold',
+                color=tc, zorder=3,
+            ))
+            node_text_artists.append(ax.text(
+                x, y - hh * 0.38,
+                f"N = {n}",
+                ha='center', va='center',
+                fontsize=resolved_font_size, color=tc, zorder=3,
+            ))
 
         else:                                           # ── internal node ──
             label = _split_label(node["feature"], node["threshold"])
@@ -250,9 +306,11 @@ def plot_cart_tree(tree, feature_name=None, cut=0.5,
                 facecolor='#e6e6e6', zorder=2)
             ax.add_patch(box)
 
-            ax.text(x, y, label,
-                    ha='center', va='center',
-                    fontsize=resolved_font_size, color='#111111', zorder=3)
+            node_text_artists.append(ax.text(
+                x, y, label,
+                ha='center', va='center',
+                fontsize=resolved_font_size, color='#111111', zorder=3,
+            ))
 
     # ── 5. Legend ─────────────────────────────────────────────────────────────
     cut_label = f"{cut:g}"
@@ -260,10 +318,55 @@ def plot_cart_tree(tree, feature_name=None, cut=0.5,
                                label=rf'$\hat{{\mu}} > {cut_label}$  (targeted)')
     neg_patch = mpatches.Patch(facecolor=_WHITE, edgecolor='#444444',
                                label=rf'$\hat{{\mu}} \leq {cut_label}$  (not targeted)')
-    ax.legend(handles=[pos_patch, neg_patch],
-              loc='upper right', fontsize=resolved_font_size, framealpha=0.9)
+    legend = ax.legend(handles=[pos_patch, neg_patch],
+                       loc='upper right', fontsize=resolved_font_size,
+                       framealpha=0.9)
 
     fig.tight_layout()
+    fig.canvas.draw()
+
+    def _refit_auto_font(current_font_size):
+        # The title and legend can make a final adjustment to the axes. Refit
+        # and update all artists until the quarter-point result stabilizes.
+        if font_size is not None:
+            return current_font_size
+        for _ in range(3):
+            fitted_font_size = _largest_fitting_font()
+            if fitted_font_size == current_font_size:
+                break
+            current_font_size = fitted_font_size
+            for artist in node_text_artists:
+                artist.set_fontsize(current_font_size)
+            for artist in legend.get_texts():
+                artist.set_fontsize(current_font_size)
+            if title_artist is not None and title_font_size is None:
+                title_artist.set_fontsize(max(14.0, current_font_size + 2.0))
+            fig.tight_layout()
+            fig.canvas.draw()
+        return current_font_size
+
+    resolved_font_size = _refit_auto_font(resolved_font_size)
+
+    # An asymmetric tree can place its root under a wide, large-font legend.
+    # If that happens, move the legend into its own horizontal band below the
+    # axes and refit once more using the resulting final layout.
+    renderer = fig.canvas.get_renderer()
+    legend_bounds = legend.get_window_extent(renderer=renderer)
+    if any(legend_bounds.overlaps(box.get_window_extent(renderer=renderer))
+           for box in ax.patches):
+        legend.remove()
+        legend = ax.legend(
+            handles=[pos_patch, neg_patch],
+            loc='upper center',
+            bbox_to_anchor=(0.5, -0.02),
+            ncol=2,
+            fontsize=resolved_font_size,
+            framealpha=0.9,
+        )
+        fig.tight_layout()
+        fig.canvas.draw()
+        resolved_font_size = _refit_auto_font(resolved_font_size)
+
     if save_path:
         save_path = Path(save_path)
         if not save_path.suffix:
