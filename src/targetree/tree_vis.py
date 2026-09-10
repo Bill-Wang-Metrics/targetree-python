@@ -30,7 +30,8 @@ _WHITE = '#FFFFFF'   # negative leaf colour  (mu-hat ≤ cut)
 
 def plot_cart_tree(tree, feature_name=None, cut=0.5,
                    figsize=None, title=None, save_path=None,
-                   font_size=None, split_rule_lines=1):
+                   font_size=None, split_rule_lines=1,
+                   title_font_size=None):
     """
     Draw a CART decision tree as a matplotlib figure.
 
@@ -54,10 +55,22 @@ def plot_cart_tree(tree, feature_name=None, cut=0.5,
     split_rule_lines : number of lines used for an internal-node split rule.
                    Use 1 for "X ≤ a" or 2 for "X" on the first line and
                    "≤ a" on the second line.
+    title_font_size : title font size in points. If None, the title is made
+                   slightly larger than the resolved node font size.
+
+    Returns
+    -------
+    fig, ax : the Matplotlib figure and axes containing the tree.
     """
 
     if split_rule_lines not in (1, 2):
         raise ValueError("split_rule_lines must be either 1 or 2")
+    if title_font_size is not None:
+        if (isinstance(title_font_size, bool) or
+                not isinstance(title_font_size, (int, float))):
+            raise TypeError("title_font_size must be a positive number or None")
+        if title_font_size <= 0:
+            raise ValueError("title_font_size must be positive")
 
     # ── 1. Assign (x, y) positions ──────────────────────────────────────────
     #
@@ -111,8 +124,6 @@ def plot_cart_tree(tree, feature_name=None, cut=0.5,
     ax.set_xlim(-0.5, n_leaves - 0.5)
     ax.set_ylim(-max_depth - 0.65, 0.65)
     ax.axis('off')
-    if title:
-        ax.set_title(title, fontsize=13, fontweight='bold', pad=10)
 
     # ── Helper: feature name and split label ─────────────────────────────────
     def _fname(f):
@@ -182,6 +193,14 @@ def plot_cart_tree(tree, feature_name=None, cut=0.5,
                 upper = candidate
         resolved_font_size = round(lower * 4) / 4
 
+    resolved_title_font_size = (
+        max(14.0, resolved_font_size + 2.0)
+        if title_font_size is None else float(title_font_size)
+    )
+    if title:
+        ax.set_title(title, fontsize=resolved_title_font_size,
+                     fontweight='bold', pad=10)
+
     # ── 3. Draw edges (plain lines, top of child ↔ bottom of parent) ────────
     for nid, node in node_info.items():
         if isinstance(node, tuple):
@@ -236,10 +255,11 @@ def plot_cart_tree(tree, feature_name=None, cut=0.5,
                     fontsize=resolved_font_size, color='#111111', zorder=3)
 
     # ── 5. Legend ─────────────────────────────────────────────────────────────
+    cut_label = f"{cut:g}"
     pos_patch = mpatches.Patch(facecolor=_BLUE,  edgecolor='#444444',
-                               label=rf'$\hat{{\mu}} > {cut}$  (positive)')
+                               label=rf'$\hat{{\mu}} > {cut_label}$  (targeted)')
     neg_patch = mpatches.Patch(facecolor=_WHITE, edgecolor='#444444',
-                               label=rf'$\hat{{\mu}} \leq {cut}$  (negative)')
+                               label=rf'$\hat{{\mu}} \leq {cut_label}$  (not targeted)')
     ax.legend(handles=[pos_patch, neg_patch],
               loc='upper right', fontsize=resolved_font_size, framealpha=0.9)
 
@@ -251,3 +271,4 @@ def plot_cart_tree(tree, feature_name=None, cut=0.5,
         fig.savefig(save_path, dpi=150, bbox_inches='tight')
     else:
         plt.show()
+    return fig, ax

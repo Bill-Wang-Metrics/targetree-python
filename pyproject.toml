@@ -26,13 +26,15 @@ dependencies = [
     "scipy>=1.8",
     "scikit-learn>=1.0",
     "matplotlib>=3.5",
+    "pandas>=1.4",
 ]
 
 [project.optional-dependencies]
 dev = ["pytest>=7"]
 
 [project.urls]
-Repository = "https://github.com/YOUR_USERNAME/targetree"
+Repository = "https://github.com/Bill-Wang-Metrics/targetree-python"
+Issues = "https://github.com/Bill-Wang-Metrics/targetree-python/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/targetree"]

@@ -6,3 +6,10 @@
 /examples/data/df_sample.csv
 /examples/data/rural hospital closure data.xlsx
 /examples/data/ruralhospital_subset.xlsx
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+dist/
+build/
+*.egg-info/
