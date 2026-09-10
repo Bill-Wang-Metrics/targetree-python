@@ -25,7 +25,7 @@ python -m pip install --upgrade --force-reinstall "git+https://github.com/Bill-W
 Then verify the installation in Python:
 
 ```python
-from targetree import CART
+from targetree import targetree
 ```
 
 ## What targetree produces
@@ -46,7 +46,7 @@ evaluates its targeting policy, displays the tree, and saves a PDF copy:
 ```python
 import pandas as pd
 
-from targetree import CART
+from targetree import targetree
 from targetree.tree_vis import plot_cart_tree
 
 DATA_URL = (
@@ -59,7 +59,7 @@ predictors = [column for column in diabetes.columns if column != "Outcome"]
 X = diabetes[predictors].to_numpy(dtype=float)
 y = diabetes["Outcome"].to_numpy(dtype=float)
 
-model = CART(
+model = targetree(
     depth=3,
     minimum_portion=0.02,
     method="mdfs",
@@ -99,8 +99,8 @@ sample.
 
 ## Methods
 
-Use the same `CART` class for all three algorithms and select the algorithm
-with the `method` argument:
+Use the same `targetree()` function for all three algorithms and select the
+algorithm with the `method` argument:
 
 | `method` | Default `lbd` | Description |
 |---|---:|---|
@@ -124,7 +124,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import pandas as pd
 
-from targetree import CART
+from targetree import targetree
 from targetree.tree_vis import plot_cart_tree
 
 DATA_URL = (
@@ -140,7 +140,7 @@ output_dir = Path("figures")
 output_dir.mkdir(exist_ok=True)
 
 for method, lbd in (("cart", None), ("mdfs", None), ("pfs", 0.5)):
-    model = CART(
+    model = targetree(
         depth=3,
         minimum_portion=0.02,
         method=method,
@@ -187,7 +187,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import pandas as pd
 
-from targetree import CART
+from targetree import targetree
 from targetree.tree_vis import plot_cart_tree
 
 DATA_URL = (
@@ -206,7 +206,7 @@ output_dir = Path("figures")
 output_dir.mkdir(exist_ok=True)
 
 for method, lbd in (("cart", None), ("mdfs", None), ("pfs", 0.5)):
-    model = CART(
+    model = targetree(
         depth=3,
         minimum_portion=0.02,
         method=method,
@@ -273,7 +273,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 
-from targetree import CART
+from targetree import targetree
 from targetree.tree_vis import plot_cart_tree
 
 DATA_URL = (
@@ -296,7 +296,7 @@ output_dir = Path("figures")
 output_dir.mkdir(exist_ok=True)
 
 for method in ("cart", "mdfs"):
-    model = CART(
+    model = targetree(
         depth=3,
         minimum_portion=30 / len(y),
         method=method,
@@ -373,7 +373,7 @@ predictors = ["numeric_score", "region"]
 X = data[predictors].to_numpy(dtype=object)
 y = data["outcome"].to_numpy(dtype=float)
 
-model = CART(
+model = targetree(
     depth=3,
     minimum_portion=0.05,
     method="mdfs",
@@ -389,7 +389,7 @@ model.fit(X, y)
 Use Python's built-in help system:
 
 ```python
-help(CART)
+help(targetree)
 help(plot_cart_tree)
 ```
 

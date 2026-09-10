@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 
-from targetree import CART
+from targetree import targetree
 from targetree.tree_vis import plot_cart_tree
 
 
@@ -33,7 +33,7 @@ def fit_and_save(frame, outcome, predictors, dataset, slug, cut):
     results = {}
 
     for method, lbd in METHODS:
-        model = CART(
+        model = targetree(
             depth=3,
             minimum_portion=0.02,
             method=method,
@@ -69,7 +69,7 @@ def fit_kd_and_save(frame, outcome, predictors, dataset, slug, cut):
 
     results = {}
     for method in ("cart", "mdfs"):
-        model = CART(
+        model = targetree(
             depth=3,
             minimum_portion=30 / len(y),
             method=method,

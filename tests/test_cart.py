@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 from scipy.special import expit
 
-from targetree import CART
+from targetree import CART, targetree
 
 
 @pytest.fixture
@@ -24,6 +24,19 @@ def test_fit_predict_cart(simple_data):
     assert preds.shape == (len(y),)
     assert preds.min() >= 0.0
     assert preds.max() <= 1.0
+
+
+def test_targetree_is_recommended_constructor(simple_data):
+    X, y, _ = simple_data
+    model = targetree(
+        depth=3,
+        minimum_portion=0.05,
+        method="mdfs",
+        cut=0.3,
+    )
+    assert isinstance(model, CART)
+    assert model.fit(X, y) is model
+    assert model.predict(X).shape == (len(y),)
 
 
 def test_fit_predict_pfs(simple_data):

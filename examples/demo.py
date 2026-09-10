@@ -3,7 +3,7 @@
 import numpy as np
 from scipy.special import expit
 
-from targetree import CART
+from targetree import targetree
 from targetree.tree_vis import plot_cart_tree
 
 
@@ -18,7 +18,13 @@ def generate_data(n: int = 5000, seed: int = 42):
 def main():
     X, y, p = generate_data()
 
-    model = CART(depth=3, minimum_portion=0.02, lbd=1, cut=0.3, method="mdfs")
+    model = targetree(
+        depth=3,
+        minimum_portion=0.02,
+        lbd=1,
+        cut=0.3,
+        method="mdfs",
+    )
     model.fit(X, y)
 
     model.print_tree()
