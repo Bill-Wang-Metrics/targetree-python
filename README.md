@@ -384,14 +384,6 @@ model = CART(
 model.fit(X, y)
 ```
 
-## Honest estimation
-
-```python
-model.fit(X_build, y_build)
-model.honest_approach(X_honest, y_honest)
-honest_predictions = model.predict(X_test, honest=True)
-```
-
 ## Getting help
 
 Use Python's built-in help system:
