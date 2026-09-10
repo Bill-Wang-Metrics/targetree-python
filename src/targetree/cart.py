@@ -340,7 +340,11 @@ class CART:
         prob:
             Optional 1-D array of continuous probabilities in ``[0, 1]``.
             When provided the tree is grown against ``prob`` rather than
-            ``target`` (used for the calibrated / oracle variant).
+            ``target`` at ordinary splits, and terminal-node estimates use
+            ``prob``. For PFS and MDFS, the final split continues to use the
+            observed ``target``. This enables probability-assisted fitting,
+            including KD-CART and KD-MDFS with probabilities from a teacher
+            model.
 
         Returns
         -------

@@ -42,6 +42,18 @@ def test_fit_predict_mdfs(simple_data):
     assert preds.shape == (len(y),)
 
 
+@pytest.mark.parametrize("method", ["cart", "mdfs"])
+def test_fit_predict_knowledge_distillation(simple_data, method):
+    X, y, p = simple_data
+    model = CART(depth=4, minimum_portion=0.05, method=method, cut=0.3)
+    model.fit(X, y, prob=p)
+    preds = model.predict(X)
+    assert preds.shape == (len(y),)
+    assert preds.min() >= 0.0
+    assert preds.max() <= 1.0
+    assert sum(model.get_risk(X, y)) == len(y)
+
+
 def test_get_risk_returns_four_ints(simple_data):
     X, y, _ = simple_data
     model = CART(depth=3, minimum_portion=0.05, method="cart")

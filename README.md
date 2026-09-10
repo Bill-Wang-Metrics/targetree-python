@@ -3,8 +3,10 @@
 `targetree` helps applied researchers construct interpretable targeting rules
 for binary outcomes. It fits classification trees using CART, Penalized Final
 Split (PFS), or Maximum Distance Final Split (MDFS), evaluates the resulting
-targeting policy, and draws publication-ready tree diagrams. The package
-requires Python 3.9 or newer.
+targeting policy, and draws publication-ready tree diagrams. It can also
+distill predicted probabilities from a flexible teacher model into
+interpretable KD-CART and KD-MDFS trees. The package requires Python 3.9 or
+newer.
 
 ## Installation
 
@@ -249,6 +251,90 @@ The confusion-matrix counts reproduce the R and Stata implementations:
 | Forest fires | CART | 28 | 123 | 14 | 352 |
 | Forest fires | MDFS | 53 | 98 | 55 | 311 |
 | Forest fires | PFS (`lbd=0.5`) | 49 | 102 | 47 | 319 |
+
+## Knowledge distillation
+
+The Python interface also supports knowledge distillation. First fit a
+flexible *teacher* model and obtain its predicted probabilities. Then supply
+those probabilities through `prob` when fitting `targetree`. With
+`method="cart"`, this produces KD-CART. With `method="mdfs"`, it produces
+KD-MDFS.
+
+In probability-assisted fitting, ordinary splits and terminal-node estimates
+use the teacher probabilities. For KD-MDFS, the final MDFS split continues to
+use the observed binary outcome and the policy threshold. The following
+complete block reproduces the two forest-fire knowledge-distillation diagrams
+displayed below:
+
+```python
+from pathlib import Path
+
+import matplotlib.pyplot as plt
+import pandas as pd
+from sklearn.ensemble import RandomForestClassifier
+
+from targetree import CART
+from targetree.tree_vis import plot_cart_tree
+
+DATA_URL = (
+    "https://raw.githubusercontent.com/Bill-Wang-Metrics/"
+    "targetree-python/main/examples/data/forestfires.csv"
+)
+forestfires = pd.read_csv(DATA_URL)
+predictors = [
+    "X", "Y", "FFMC", "DMC", "DC", "ISI", "temp", "RH", "wind", "rain"
+]
+X = forestfires[predictors].to_numpy(dtype=float)
+y = (forestfires["area"] > 5).to_numpy(dtype=float)
+
+# The random forest is the flexible teacher model.
+teacher = RandomForestClassifier(n_estimators=100, random_state=6)
+teacher.fit(X, y)
+teacher_probability = teacher.predict_proba(X)[:, 1]
+
+output_dir = Path("figures")
+output_dir.mkdir(exist_ok=True)
+
+for method in ("cart", "mdfs"):
+    model = CART(
+        depth=3,
+        minimum_portion=30 / len(y),
+        method=method,
+        cut=1 / 3,
+        feature_name=predictors,
+    )
+    model.fit(X, y, prob=teacher_probability)
+    print(f"KD-{method.upper()}", model.get_risk(X, y))
+
+    figure, _ = plot_cart_tree(
+        model.tree,
+        feature_name=model.feature_name,
+        cut=model.cut,
+        title=f"Forest fires: KD-{method.upper()}",
+        split_rule_lines=2,
+        title_font_size=18,
+        save_path=output_dir / f"forestfires-kd-{method}.png",
+    )
+    plt.close(figure)
+```
+
+Forest-fire KD-CART tree:
+
+![KD-CART targeting tree for the forest-fire example](examples/figures/forestfires-kd-cart.png)
+
+Forest-fire KD-MDFS tree:
+
+![KD-MDFS targeting tree for the forest-fire example](examples/figures/forestfires-kd-mdfs.png)
+
+| Method | TP | FN | FP | TN |
+|---|---:|---:|---:|---:|
+| KD-CART | 44 | 107 | 57 | 309 |
+| KD-MDFS | 60 | 91 | 83 | 283 |
+
+The example above uses in-sample teacher probabilities to mirror the original
+package notebook. For out-of-sample performance evaluation, estimate the
+teacher probabilities on separate or cross-fitted data before fitting and
+evaluating the distilled tree.
 
 ## Tree output
 
